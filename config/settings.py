@@ -58,9 +58,13 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.gis",
     "rest_framework",  # required for serving swagger ui's css/js files
     "drf_yasg",
-    "dj_sinp_metadata",
+    "roles",
+    "sinp_nomenclatures",
+    "sinp_organisms",
+    "sinp_metadata",
 ]
 
 MIDDLEWARE = [
@@ -106,7 +110,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql_psycopg2",
+        "ENGINE": "django.contrib.gis.db.backends.postgis",
         "NAME": config("DBNAME", default="dbchiroweb"),
         "USER": config("DBUSER"),
         "PASSWORD": config("DBPASSWORD"),
@@ -114,6 +118,9 @@ DATABASES = {
         "PORT": config("DBPORT", default="5432", cast=int),
     }
 }
+
+
+AUTH_USER_MODEL = "roles.Role"
 
 # Password validation
 # https://docs.djangoproject.com/en/3.2/ref/settings/#auth-password-validators
@@ -175,3 +182,5 @@ EMAIL_PORT = config("EMAIL_PORT", cast=int)
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD")
 EMAIL_HOST_USER = config("EMAIL_HOST_USER")
 EMAIL_USE_TLS = config("EMAIL_USE_TLS", cast=bool)
+
+GEODATA_SRID = config("GEODATA_SRID", cast=int, default=4326)

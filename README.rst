@@ -40,7 +40,7 @@ Quick start
         path('admin/', admin.site.urls),
         path('api-auth/', include('rest_framework.urls')),
         (...),
-        path('api/v1/', include('dj_sinp_metadata.urls')),
+        path('api/v1/', include('sinp_metadata.urls')),
         (...),
     ]
 
