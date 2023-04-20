@@ -3,6 +3,7 @@ import logging
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from rest_framework.permissions import BasePermission
+from sinp_organisms.models import OrganismMember
 
 from .models import ActorRole
 
@@ -55,8 +56,8 @@ class IsOrganismManager(BasePermission):
 
             perm = (
                 orgamember.member_level.code == "manager"
-                or request.user == obj.created_by
-                or request.user.is_superuser
+                or request.user == obj.created_by  # noqa: W503
+                or request.user.is_superuser  # noqa: W503
             )
             logger.debug(f"perm {perm}")
             return perm

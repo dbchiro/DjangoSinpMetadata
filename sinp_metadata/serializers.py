@@ -19,7 +19,7 @@ class NomenclatureLabel(serializers.ModelSerializer):
 class SimpleOrganism(serializers.ModelSerializer):
     class Meta:
         model = Organism
-        fields = ["id_organism", "label"]
+        fields = ["id", "label"]
 
 
 class SimpleUser(serializers.ModelSerializer):
@@ -116,7 +116,7 @@ class OrganismSerializer(serializers.ModelSerializer):
     class Meta:
         model = Organism
         fields = [
-            "id_organism",
+            "id",
             "uuid",
             "label",
             "short_label",

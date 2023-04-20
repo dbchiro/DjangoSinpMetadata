@@ -39,7 +39,7 @@ class NomenclatureAdmin(admin.ModelAdmin):
 
 class OrganismAdmin(admin.ModelAdmin):
     list_display = (
-        "id_organism",
+        "id",
         "short_label",
         "status",
         "type",
