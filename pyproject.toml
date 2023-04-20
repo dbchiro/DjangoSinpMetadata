@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dj_sinp_metadata"
-version = "0.1.1"
+version = "0.1.2"
 description = "Django app to manage french SINP metadata"
 authors = ["dbChiro <project@dbchiro.org>",]
 license = "AGPLv3"

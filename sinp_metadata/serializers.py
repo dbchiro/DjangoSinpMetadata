@@ -3,14 +3,9 @@ import logging
 from django.conf import settings
 from rest_framework import serializers
 from rest_framework.serializers import SerializerMethodField
+from sinp_nomenclatures.models import Nomenclature
 
-from .models import (
-    AcquisitionFramework,
-    ActorRole,
-    Keyword,
-    Nomenclature,
-    Organism,
-)
+from .models import AcquisitionFramework, ActorRole, Keyword, Organism
 
 logger = logging.getLogger(__name__)
 

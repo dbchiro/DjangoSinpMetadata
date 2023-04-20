@@ -61,7 +61,7 @@ INSTALLED_APPS = [
     "django.contrib.gis",
     "rest_framework",  # required for serving swagger ui's css/js files
     "drf_yasg",
-    "roles",
+    # "roles",
     "sinp_nomenclatures",
     "sinp_organisms",
     "sinp_metadata",
@@ -120,7 +120,7 @@ DATABASES = {
 }
 
 
-AUTH_USER_MODEL = "roles.Role"
+# AUTH_USER_MODEL = "roles.Role"
 
 # Password validation
 # https://docs.djangoproject.com/en/3.2/ref/settings/#auth-password-validators
