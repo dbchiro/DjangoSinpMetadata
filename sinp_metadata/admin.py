@@ -6,7 +6,6 @@ from .models import (
     ActorRole,
     Dataset,
     Keyword,
-    Nomenclature,
     Publication,
 )
 
@@ -59,7 +58,6 @@ class OrganismMemberAdmin(admin.ModelAdmin):
 
 
 # Register your models here.
-admin.site.register(Nomenclature, NomenclatureAdmin)
 admin.site.register(AcquisitionFramework, AcquisitionFrameworkAdmin)
 admin.site.register(Dataset, DatasetAdmin)
 admin.site.register(ActorRole)

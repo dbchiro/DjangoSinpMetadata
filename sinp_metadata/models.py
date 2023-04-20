@@ -15,7 +15,8 @@ User = get_user_model()
 
 phone_regex = RegexValidator(
     regex=r"^\+?1?\d{9,15}$",
-    message="Les numéros de téléphones doivent être renseignés avec le format : '+999999999'. jusqu'à 15 chiffres sont autorisés",
+    message="Les numéros de téléphones doivent être renseignés "
+    "avec le format : '+999999999'. jusqu'à 15 chiffres sont autorisés",
 )
 
 
@@ -25,7 +26,6 @@ phone_regex = RegexValidator(
 class BaseModel(
     models.Model
 ):  # base class should subclass 'django.db.models.Model'
-
     timestamp_create = models.DateTimeField(auto_now_add=True, editable=False)
     timestamp_update = models.DateTimeField(auto_now=True, editable=False)
     created_by = models.ForeignKey(
@@ -51,28 +51,6 @@ class BaseModel(
         abstract = True
 
 
-class Nomenclature(models.Model):
-    id_nomenclature = models.AutoField(primary_key=True, db_index=True)
-    type = models.CharField(
-        max_length=255, db_index=True, verbose_name=_("Type de nomenclature")
-    )
-    code = models.CharField(
-        max_length=255, db_index=True, verbose_name=_("Code")
-    )
-    label = models.CharField(max_length=255, verbose_name=_("Libellé"))
-    description = models.TextField(
-        blank=True, null=True, verbose_name=_("Description")
-    )
-    active = models.BooleanField(default=True, verbose_name=_("Est utilisé"))
-
-    class Meta:
-        verbose_name_plural = _("nomenclatures")
-        unique_together = ("type", "code")
-
-    def __str__(self):
-        return self.label
-
-
 class ActorRole(BaseModel):
     id_actor_role = models.AutoField(primary_key=True)
     role = models.ForeignKey(
@@ -94,9 +72,9 @@ class ActorRole(BaseModel):
         on_delete=models.SET_NULL,
     )
     actor_role = models.ForeignKey(
-        "Nomenclature",
+        "sinp_nomenclatures.Nomenclature",
         on_delete=models.CASCADE,
-        limit_choices_to={"type": "actor_role"},
+        limit_choices_to={"type__mnemonic": "actor_role"},
         related_name="actor_role",
         verbose_name=_("Rôle de l'acteur"),
     )
@@ -190,15 +168,18 @@ class Dataset(BaseModel):
         null=True,
         verbose_name=_("Date de révision"),
         help_text=_(
-            "Date de révision du jeu de données ou de sa fiche de métadonnées. Il est fortement recommandé de remplir cet attribut si une révision de la fiche ou du jeu de données a été effectuée"
+            "Date de révision du jeu de données ou de sa fiche de "
+            "métadonnées. Il est fortement recommandé de remplir "
+            "cet attribut si une révision de la fiche ou du jeu de "
+            "données a été effectuée"
         ),
     )
     data_type = models.ForeignKey(
-        "Nomenclature",
+        "sinp_nomenclatures.Nomenclature",
         on_delete=models.SET_NULL,
         blank=True,
         null=True,
-        limit_choices_to={"type": "data_type"},
+        limit_choices_to={"type__mnemonic": "data_type"},
         related_name="ds_data_type",
         verbose_name=_("Type de données"),
     )
@@ -231,12 +212,13 @@ class Dataset(BaseModel):
         verbose_name=_("Mots-clés"),
     )
     territory = models.ManyToManyField(
-        "Nomenclature",
-        limit_choices_to={"type": "territory"},
+        "sinp_nomenclatures.Nomenclature",
+        limit_choices_to={"type__mnemonic": "territory"},
         related_name="ds_territory",
         verbose_name=_("Territoire"),
         help_text=_(
-            "Cible géographique du jeu de données, ou zone géographique visée par le jeu"
+            "Cible géographique du jeu de données, "
+            "ou zone géographique visée par le jeu"
         ),
     )
     marine_domain = models.BooleanField(
@@ -247,11 +229,11 @@ class Dataset(BaseModel):
     )
     # TODO Nomenclature Objectifs JDD et suivantes
     objective = models.ForeignKey(
-        "Nomenclature",
+        "sinp_nomenclatures.Nomenclature",
         on_delete=models.SET_NULL,
         blank=True,
         null=True,
-        limit_choices_to={"type": "dataset_objective"},
+        limit_choices_to={"type__mnemonic": "dataset_objective"},
         related_name="ds_objective",
         verbose_name=_("Objectifs"),
     )
@@ -263,17 +245,18 @@ class Dataset(BaseModel):
         help_text=_("rectangle permettant d'englober le jeu de données"),
     )
     collecting_method = models.ManyToManyField(
-        "Nomenclature",
-        limit_choices_to={"type": "collect_method"},
+        "sinp_nomenclatures.Nomenclature",
+        limit_choices_to={"type__mnemonic": "collect_method"},
         related_name="ds_collecting_method",
         verbose_name=_("Méthode de recueil des données"),
         help_text=_(
-            "Ensemble de techniques, savoir-faire et outils mobilisés pour collecter des données"
+            "Ensemble de techniques, savoir-faire et "
+            "outils mobilisés pour collecter des données"
         ),
     )
     protocols = models.ManyToManyField(
-        "Nomenclature",
-        limit_choices_to={"type": "protocol_type"},
+        "sinp_nomenclatures.Nomenclature",
+        limit_choices_to={"type__mnemonic": "protocol_type"},
         related_name="ds_protocols",
         verbose_name=_("Protocoles"),
     )
@@ -298,38 +281,38 @@ class AcquisitionFramework(BaseModel):
     label = models.CharField(max_length=255, verbose_name=_("Libellé"))
     desc = models.TextField(verbose_name=_("Description"))
     context = models.ManyToManyField(
-        "Nomenclature",
-        limit_choices_to={"type": "context"},
+        "sinp_nomenclatures.Nomenclature",
+        limit_choices_to={"type__mnemonic": "context"},
         related_name="af_context",
         verbose_name=_("volet SINP"),
     )
     objective = models.ManyToManyField(
-        "Nomenclature",
-        limit_choices_to={"type": "objective"},
+        "sinp_nomenclatures.Nomenclature",
+        limit_choices_to={"type__mnemonic": "objective"},
         related_name="af_objective",
         verbose_name=_("Objectifs"),
     )
     territory_level = models.ForeignKey(
-        "Nomenclature",
+        "sinp_nomenclatures.Nomenclature",
         blank=True,
         null=True,
         on_delete=models.SET_NULL,
-        limit_choices_to={"type": "territory_level"},
+        limit_choices_to={"type__mnemonic": "territory_level"},
         related_name="af_territory_level",
         verbose_name=_("Niveau territorial"),
     )
     territory = models.ManyToManyField(
-        "Nomenclature",
-        limit_choices_to={"type": "territory"},
+        "sinp_nomenclatures.Nomenclature",
+        limit_choices_to={"type__mnemonic": "territory"},
         related_name="af_territory",
         verbose_name=_("Territoires"),
     )
     geo_accuracy = models.ForeignKey(
-        "Nomenclature",
+        "sinp_nomenclatures.Nomenclature",
         blank=True,
         null=True,
         on_delete=models.SET_NULL,
-        limit_choices_to={"type": "geo_accuracy"},
+        limit_choices_to={"type__mnemonic": "geo_accuracy"},
         related_name="af_geo_accuracy",
         verbose_name=_("Précision géographique"),
     )
@@ -340,11 +323,11 @@ class AcquisitionFramework(BaseModel):
         verbose_name=_("Mots-clés"),
     )
     financing_type = models.ForeignKey(
-        "Nomenclature",
+        "sinp_nomenclatures.Nomenclature",
         blank=True,
         null=True,
         on_delete=models.SET_NULL,
-        limit_choices_to={"type": "financing_type"},
+        limit_choices_to={"type__mnemonic": "financing_type"},
         related_name="af_financing_type",
         verbose_name=_("Type de financement"),
     )
