@@ -1,8 +1,9 @@
 import logging
 
-from django.contrib.auth import get_user_model
+# from django.contrib.auth import get_user_model
 from django.db.models import Q
 from rest_framework.permissions import BasePermission
+from sinp_nomenclatures.models import Nomenclature
 from sinp_organisms.models import OrganismMember
 
 from .models import ActorRole
@@ -20,11 +21,9 @@ class AcquisitionFrameworkListPermissionsMixin(object):
             queryset
         """
 
-        qs = super(
-            AcquisitionFrameworkListPermissionsMixin, self
-        ).get_queryset()
-        logged_user = self.request.user
-        user = get_user_model().objects.get(id=logged_user.id)
+        qs = super().get_queryset()
+        user = self.request.user
+        # user = get_user_model().objects.get(id=logged_user.id)
 
         if user.access_all_data or user.edit_all_data or user.is_superuser:
             return qs
@@ -42,22 +41,26 @@ class IsOrganismManager(BasePermission):
 
     def has_object_permission(self, request, view, obj):
         try:
-            logger.debug(f"request.user {request.user}")
-            logger.debug(
-                f"request.user.is_superuser {request.user.is_superuser}"
+            user = request.user
+            # logger.debug(f"request.user {request.user}")
+            # logger.debug(
+            #     f"request.user.is_superuser {request.user.is_superuser}"
+            # )
+            # logger.debug(f"pk {obj.pk}")
+            manager_nomenclature = Nomenclature.objects.filter(
+                type__mnemonic="member_level", code="manager"
             )
-            logger.debug(f"pk {obj.pk}")
             orgamember = OrganismMember.objects.filter(
-                organism=obj, member=request.user
-            ).first()
+                organism=obj, member=user, code=manager_nomenclature
+            )
             logger.debug(
                 f"orgamember.memberlevel.code {orgamember.member_level.code}"
             )
 
             perm = (
-                orgamember.member_level.code == "manager"
-                or request.user == obj.created_by  # noqa: W503
-                or request.user.is_superuser  # noqa: W503
+                orgamember.exists()
+                or user == obj.created_by
+                or user.is_superuser
             )
             logger.debug(f"perm {perm}")
             return perm

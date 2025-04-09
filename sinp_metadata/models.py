@@ -9,14 +9,17 @@ from django.db import models
 from django.urls import reverse
 from django.utils.timezone import now
 from django.utils.translation import gettext_lazy as _
+from sinp_nomenclatures.models import Nomenclature
 from sinp_organisms.models import Organism
 
 User = get_user_model()
 
 phone_regex = RegexValidator(
     regex=r"^\+?1?\d{9,15}$",
-    message="Les numéros de téléphones doivent être renseignés "
-    "avec le format : '+999999999'. jusqu'à 15 chiffres sont autorisés",
+    message=_(
+        "Les numéros de téléphones doivent être renseignés "
+        "avec le format : '+999999999'. jusqu'à 15 chiffres sont autorisés"
+    ),
 )
 
 
@@ -26,6 +29,12 @@ phone_regex = RegexValidator(
 class BaseModel(
     models.Model
 ):  # base class should subclass 'django.db.models.Model'
+    uuid = models.UUIDField(
+        default=uuid4,
+        unique=True,
+        editable=False,
+        verbose_name=_("Unique ID (UUID)"),
+    )
     timestamp_create = models.DateTimeField(auto_now_add=True, editable=False)
     timestamp_update = models.DateTimeField(auto_now=True, editable=False)
     created_by = models.ForeignKey(
@@ -52,49 +61,52 @@ class BaseModel(
 
 
 class ActorRole(BaseModel):
-    id_actor_role = models.AutoField(primary_key=True)
-    role = models.ForeignKey(
+    legal_person = models.ForeignKey(
         User,
         blank=True,
         null=True,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
     )
     organism = models.ForeignKey(
-        Organism, blank=True, null=True, on_delete=models.SET_NULL
-    )
-    dataset = models.ForeignKey(
-        "Dataset", blank=True, null=True, on_delete=models.SET_NULL
-    )
-    acquisition_framework = models.ForeignKey(
-        "AcquisitionFramework",
-        blank=True,
-        null=True,
-        on_delete=models.SET_NULL,
+        Organism, blank=True, null=True, on_delete=models.CASCADE
     )
     actor_role = models.ForeignKey(
-        "sinp_nomenclatures.Nomenclature",
+        Nomenclature,
         on_delete=models.CASCADE,
-        limit_choices_to={"type__mnemonic": "actor_role"},
+        limit_choices_to={"type__mnemonic": "roleActeur"},
         related_name="actor_role",
-        verbose_name=_("Rôle de l'acteur"),
+        verbose_name=_("Actor's role"),
+    )
+    anonymization = models.BooleanField(
+        default=False,
+        verbose_name=_("Anonymization"),
+        help_text=_(
+            "I want this actor's identity to be blurred "
+            "when the data is distributed"
+        ),
     )
 
     def __str__(self):
-        if self.organism is not None:
-            actor = self.organism
-        else:
-            actor = self.role
-
-        return "{} ({})".format(actor.short_label, self.actor_role.label)
+        actor = self.organism or self.legal_person
+        return f"{actor} ({self.actor_role.label})"
 
     class Meta:
         verbose_name_plural = _("rôles des acteurs")
         unique_together = (
-            ("role", "dataset", "actor_role"),
-            ("organism", "dataset", "actor_role"),
-            ("role", "acquisition_framework", "actor_role"),
-            ("organism", "acquisition_framework", "actor_role"),
+            ("legal_person", "actor_role"),
+            ("organism", "actor_role"),
         )
+        constraints = [
+            models.CheckConstraint(
+                name="%(app_label)s_%(class)s_legal_person_or_organism",
+                check=(
+                    models.Q(legal_person__isnull=True, organism__isnull=False)
+                    | models.Q(
+                        legal_person__isnull=False, organism__isnull=True
+                    )
+                ),
+            )
+        ]
 
 
 class Keyword(BaseModel):
@@ -104,106 +116,216 @@ class Keyword(BaseModel):
         return self.keyword
 
     class Meta:
-        verbose_name_plural = _("mots clés")
+        verbose_name_plural = _("key words")
 
 
 class Publication(BaseModel):
-    id_publication = models.AutoField(primary_key=True)
     label = models.CharField(
-        max_length=255, unique=True, verbose_name=_("Nom")
+        max_length=255, unique=True, verbose_name=_("Name")
     )
     url = models.URLField(
-        blank=True, null=True, verbose_name=_("URL de la publication")
+        blank=True, null=True, verbose_name=_("Publication URL")
     )
     reference = models.TextField(
         blank=True,
         null=True,
-        verbose_name=_("Référence complète"),
-        help_text=_("Suivant la nomenclature ISO 690"),
+        verbose_name=_("Full reference"),
+        help_text=_("According to ISO 690 nomenclature"),
     )
     file = models.FileField(
         blank=True,
         null=True,
         upload_to="metadata/publications/",
-        verbose_name=_("Fichier"),
+        verbose_name=_("File"),
     )
 
     def __str__(self):
-        return "#{} {}".format(self.id_publication, self.label)
+        return f"#{self.pk} {self.label}"
 
     class Meta:
         verbose_name_plural = _("publications")
 
 
-class Dataset(BaseModel):
-    id_dataset = models.AutoField(primary_key=True)
-    uuid = models.UUIDField(
-        default=uuid4,
-        unique=True,
-        editable=False,
-        verbose_name=_("Identifiant unique"),
+class OtherProtocolAndMethod(BaseModel):
+    CATEGORY = (
+        ("protocol", _("Protocol")),
+        ("method", _("Method")),
     )
+
+    category = models.CharField(choices=CATEGORY)
+    label = models.CharField(verbose_name=_("Label"), unique=True)
+    desc = models.TextField(verbose_name=_("Description"))
+    reference = models.CharField(verbose_name=_("Reference"))
+
+    def __str__(self):
+        return f"#{self.pk} {self.label}"
+
+    class Meta:
+        verbose_name_plural = _("other protocols")
+
+
+class SourceDatabase(BaseModel):
+    label = models.CharField(verbose_name=_("Label"), unique=True)
+    description = models.TextField(
+        verbose_name=_("Description"), default="", blank=True
+    )
+    url = models.URLField(_("URL"), max_length=200)
+    contact = models.ForeignKey(
+        ActorRole,
+        blank=True,
+        null=True,
+        verbose_name="Contact",
+        on_delete=models.SET_NULL,
+    )
+
+    def __str__(self):
+        return f"#{self.pk} {self.label}"
+
+    class Meta:
+        verbose_name_plural = _("source databases")
+
+
+class Project(BaseModel):
+    label = models.CharField(verbose_name=_("Label"), unique=True)
+    description = models.TextField(
+        verbose_name=_("Descriotion"), default="", blank=True
+    )
+    contact = models.ForeignKey(
+        ActorRole,
+        verbose_name=_("Contact"),
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
+    is_active = models.BooleanField(verbose_name=_("Active"), default=True)
+
+    def __str__(self):
+        return f"#{self.pk} {self.label}"
+
+    class Meta:
+        verbose_name_plural = _("projects")
+
+
+class Dataset(BaseModel):
     acquisition_framework = models.ForeignKey(
         "AcquisitionFramework",
         on_delete=models.CASCADE,
-        verbose_name=_("Cadre d'acquisition"),
+        verbose_name=_("Acquisition framework"),
         related_name="ds_acquisition_framework",
     )
+    project = models.ForeignKey(
+        "Project",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        verbose_name=_("Project"),
+        related_name="ds_project",
+    )
+    # linked_datasets = models.ManyToManyField(
+    #     "self", verbose_name=_("Linked datasets")
+    # )
     label = models.CharField(
-        max_length=150, unique=True, verbose_name=_("Nom du jeu de données")
+        max_length=150, unique=True, verbose_name=_("Label")
     )
     short_label = models.CharField(
-        max_length=30, unique=True, verbose_name=_("Libellé court")
+        max_length=30, unique=True, verbose_name=_("Short label")
     )
     desc = models.TextField(verbose_name=_("Description"))
-    creation_date = models.DateField(
+    date_create = models.DateField(
         default=now,
-        verbose_name=_("Date de création"),
+        verbose_name=_("Create date"),
         help_text=_(
             "Date de création de la fiche de métadonnées du jeu de données."
         ),
     )
-    revision_date = models.DateField(
-        blank=True,
-        null=True,
-        verbose_name=_("Date de révision"),
-        help_text=_(
-            "Date de révision du jeu de données ou de sa fiche de "
-            "métadonnées. Il est fortement recommandé de remplir "
-            "cet attribut si une révision de la fiche ou du jeu de "
-            "données a été effectuée"
-        ),
-    )
     data_type = models.ForeignKey(
-        "sinp_nomenclatures.Nomenclature",
+        Nomenclature,
         on_delete=models.SET_NULL,
         blank=True,
         null=True,
-        limit_choices_to={"type__mnemonic": "data_type"},
+        limit_choices_to={"type__mnemonic": "typeDonnees"},
         related_name="ds_data_type",
-        verbose_name=_("Type de données"),
+        verbose_name=_("Data type"),
     )
-    actor_role_user = models.ManyToManyField(
-        User,
-        through="ActorRole",
-        through_fields=("dataset", "role"),
-        verbose_name=_("Acteurs (personnes physiques)"),
-        related_name="ds_actor_user",
+    data_category = models.ForeignKey(
+        Nomenclature,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        limit_choices_to={"type__mnemonic": "categorieDonnees"},
+        related_name="ds_data_category",
+        verbose_name=_("Data category"),
     )
-    actor_role_organism = models.ManyToManyField(
-        Organism,
-        through="ActorRole",
-        through_fields=("dataset", "organism"),
-        verbose_name=_("Acteurs (personnes morales)"),
-        related_name="ds_actor_organism",
+    data_category_prec = models.TextField(
+        default="", verbose_name=_("Précision sur la catégorie des données")
     )
-    actor_sinp = models.ForeignKey(
-        "ActorRole",
-        related_name="ds_actor_sinp",
-        verbose_name=_("Point de contact principal pour la plateforme SINP"),
-        # TODO WIP on limit choices to acteur principal
-        limit_choices_to={"actor_role__code": "1"},
-        on_delete=models.DO_NOTHING,
+    features = models.ManyToManyField(
+        Nomenclature,
+        blank=True,
+        limit_choices_to={"type__mnemonic": "caracteristiqueJdd"},
+        related_name="ds_features",
+        verbose_name=_("Features"),
+    )
+    ebv_classes = models.ManyToManyField(
+        Nomenclature,
+        blank=True,
+        limit_choices_to={"type__mnemonic": "classeEBV"},
+        related_name="ds_ebv_classes",
+        verbose_name=_("EBV classes (https://geobon.org/ebvs/what-are-ebvs/)"),
+    )
+    data_origin_status = models.ForeignKey(
+        Nomenclature,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        limit_choices_to={"type__mnemonic": "statutOrigineDonnees"},
+        related_name="ds_data_origin_status",
+        verbose_name=_("Data origin status"),
+    )
+    # TODO: Créer la nomenclature
+    collecting_method = models.ManyToManyField(
+        Nomenclature,
+        limit_choices_to={"type__mnemonic": "CodeCAMPanule"},
+        related_name="ds_collecting_method",
+        verbose_name=_("Méthode de recueil des données"),
+        help_text=_(
+            "Ensemble de techniques, savoir-faire et "
+            "outils mobilisés pour collecter des données"
+        ),
+    )
+    method_precision = models.TextField(
+        default="", verbose_name=_("Precisions on collecting method")
+    )
+    other_method = models.ForeignKey(
+        OtherProtocolAndMethod,
+        blank=True,
+        null=True,
+        limit_choices_to={"category": "method"},
+        verbose_name=_("Other method"),
+        related_name="ds_other_method",
+        on_delete=models.SET_NULL,
+    )
+    collecting_protocol = models.ManyToManyField(
+        Nomenclature,
+        limit_choices_to={"type__mnemonic": "CodeCAMPanule"},
+        related_name="ds_collecting_protocol",
+        verbose_name=_("Protocole de recueil des données"),
+        help_text=_(
+            "Ensemble de techniques, savoir-faire et "
+            "outils mobilisés pour collecter des données"
+        ),
+    )
+    protocol_precision = models.TextField(
+        default="", verbose_name=_("Precisions on collecting protocol")
+    )
+    other_protocol = models.ForeignKey(
+        OtherProtocolAndMethod,
+        blank=True,
+        null=True,
+        limit_choices_to={"category": "protocol"},
+        verbose_name=_("Other protocol"),
+        related_name="ds_other_protocol",
+        on_delete=models.SET_NULL,
     )
     keywords = models.ManyToManyField(
         "Keyword",
@@ -212,7 +334,7 @@ class Dataset(BaseModel):
         verbose_name=_("Mots-clés"),
     )
     territory = models.ManyToManyField(
-        "sinp_nomenclatures.Nomenclature",
+        Nomenclature,
         limit_choices_to={"type__mnemonic": "territory"},
         related_name="ds_territory",
         verbose_name=_("Territoire"),
@@ -221,22 +343,6 @@ class Dataset(BaseModel):
             "ou zone géographique visée par le jeu"
         ),
     )
-    marine_domain = models.BooleanField(
-        default=False, verbose_name=_("Domaine maritime")
-    )
-    terrestrial_domain = models.BooleanField(
-        default=True, verbose_name=_("Domaine terrestre")
-    )
-    # TODO Nomenclature Objectifs JDD et suivantes
-    objective = models.ForeignKey(
-        "sinp_nomenclatures.Nomenclature",
-        on_delete=models.SET_NULL,
-        blank=True,
-        null=True,
-        limit_choices_to={"type__mnemonic": "dataset_objective"},
-        related_name="ds_objective",
-        verbose_name=_("Objectifs"),
-    )
     bbox = gismodels.PolygonField(
         srid=settings.GEODATA_SRID,
         null=True,
@@ -244,77 +350,45 @@ class Dataset(BaseModel):
         verbose_name=_("Emprise géographique"),
         help_text=_("rectangle permettant d'englober le jeu de données"),
     )
-    collecting_method = models.ManyToManyField(
-        "sinp_nomenclatures.Nomenclature",
-        limit_choices_to={"type__mnemonic": "collect_method"},
-        related_name="ds_collecting_method",
-        verbose_name=_("Méthode de recueil des données"),
-        help_text=_(
-            "Ensemble de techniques, savoir-faire et "
-            "outils mobilisés pour collecter des données"
-        ),
-    )
-    protocols = models.ManyToManyField(
-        "sinp_nomenclatures.Nomenclature",
-        limit_choices_to={"type__mnemonic": "protocol_type"},
-        related_name="ds_protocols",
-        verbose_name=_("Protocoles"),
-    )
     active = models.BooleanField(default=True, verbose_name=_("Actif"))
     validable = models.BooleanField(blank=True, verbose_name=_("Validable"))
 
     def __str__(self):
-        return "#{} {}".format(self.id_dataset, self.label)
+        return f"#{self.pk} {self.label}"
 
     class Meta:
         verbose_name_plural = _("jeux de données")
+        permissions = (
+            (
+                "can_edit_self_dataset_organism",
+                "Can edit dataset from user organism",
+            ),
+        )
 
 
 class AcquisitionFramework(BaseModel):
-    id_acquisition_framework = models.AutoField(primary_key=True)
-    uuid = models.UUIDField(
-        default=uuid4,
-        unique=True,
-        editable=False,
-        verbose_name=_("Identifiant unique"),
-    )
     label = models.CharField(max_length=255, verbose_name=_("Libellé"))
     desc = models.TextField(verbose_name=_("Description"))
-    context = models.ManyToManyField(
-        "sinp_nomenclatures.Nomenclature",
-        limit_choices_to={"type__mnemonic": "context"},
-        related_name="af_context",
-        verbose_name=_("volet SINP"),
-    )
     objective = models.ManyToManyField(
-        "sinp_nomenclatures.Nomenclature",
-        limit_choices_to={"type__mnemonic": "objective"},
+        Nomenclature,
+        limit_choices_to={"type__mnemonic": "objectifCA"},
         related_name="af_objective",
         verbose_name=_("Objectifs"),
     )
     territory_level = models.ForeignKey(
-        "sinp_nomenclatures.Nomenclature",
+        Nomenclature,
         blank=True,
         null=True,
         on_delete=models.SET_NULL,
-        limit_choices_to={"type__mnemonic": "territory_level"},
+        limit_choices_to={"type__mnemonic": "echelleTerritoriale"},
         related_name="af_territory_level",
         verbose_name=_("Niveau territorial"),
     )
     territory = models.ManyToManyField(
-        "sinp_nomenclatures.Nomenclature",
-        limit_choices_to={"type__mnemonic": "territory"},
+        Nomenclature,
+        limit_choices_to={"type__mnemonic": "territoire"},
         related_name="af_territory",
         verbose_name=_("Territoires"),
-    )
-    geo_accuracy = models.ForeignKey(
-        "sinp_nomenclatures.Nomenclature",
-        blank=True,
-        null=True,
-        on_delete=models.SET_NULL,
-        limit_choices_to={"type__mnemonic": "geo_accuracy"},
-        related_name="af_geo_accuracy",
-        verbose_name=_("Précision géographique"),
     )
     keywords = models.ManyToManyField(
         "Keyword",
@@ -322,21 +396,12 @@ class AcquisitionFramework(BaseModel):
         related_name="af_keywords",
         verbose_name=_("Mots-clés"),
     )
-    financing_type = models.ForeignKey(
-        "sinp_nomenclatures.Nomenclature",
-        blank=True,
-        null=True,
-        on_delete=models.SET_NULL,
-        limit_choices_to={"type__mnemonic": "financing_type"},
-        related_name="af_financing_type",
-        verbose_name=_("Type de financement"),
-    )
-    actor = models.ManyToManyField(
+    actors = models.ManyToManyField(
         "ActorRole", related_name="af_actor", verbose_name=_("Acteurs")
     )
     target_description = models.TextField(blank=True, null=True)
     is_metaframework = models.BooleanField(
-        blank=True, null=True, verbose_name=_("Est un métacadre parent")
+        default=False, verbose_name=_("Est un métacadre parent")
     )
     parent_framework = models.ForeignKey(
         "AcquisitionFramework",
@@ -348,6 +413,9 @@ class AcquisitionFramework(BaseModel):
         verbose_name=_("Métacadre parent"),
     )
     ecologic_or_geologic_target = models.TextField(blank=True, null=True)
+    date_create = models.DateField(
+        default=date.today, verbose_name=_("Date de création")
+    )
     date_start = models.DateField(
         default=date.today, verbose_name=_("Date de début")
     )
@@ -357,14 +425,20 @@ class AcquisitionFramework(BaseModel):
 
     class Meta:
         verbose_name_plural = _("cadres d'acquisition")
+        permissions = (
+            (
+                "can_edit_self_acquisitionframework_organism",
+                "Can edit acquisition framework from user organism",
+            ),
+        )
 
     def __str__(self):
-        return "#{} {}".format(self.id_acquisition_framework, self.label)
+        return "#{} {}".format(self.pk, self.label)
 
     def get_absolute_url(self):
         return reverse(
             "metadata:acquisition_framework_detail",
-            kwargs={"pk": self.id_acquisition_framework},
+            kwargs={"pk": self.pk},
         )
 
 

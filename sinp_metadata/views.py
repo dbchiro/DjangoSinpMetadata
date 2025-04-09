@@ -19,7 +19,6 @@ class OrganismViewset(LoginRequiredMixin, ModelViewSet):
     permission_classes = [IsAuthenticated, IsOrganismManager]
 
     def get_queryset(self):
-        logger.debug(f"ACTION: {self.action}")
         return Organism.objects.all()
 
 
